@@ -1,28 +1,37 @@
-import React, { useState } from "react";
-import { Col, Container, Row } from "react-bootstrap";
-import NavBar from "../components/Navbar";
-import SearchBar from "../components/SearchBar";
-import MovieCard from "../components/MovieCard";
+import React, { useState, useContext } from 'react';
+import { FavouriteContext } from '../FavouriteContexts/FavouriteContext';
+// Components
+import SearchBar from '../components/SearchBar';
+import MovieCard from '../components/MovieCard';
+import InfoModal from '../components/InfoModal';
 // api stuff
-import { filmByTitleActor } from "../MovieAPI/MovieAPI";
-import axios from "axios";
-import InfoModal from "../components/InfoModal";
+import {
+  filmByTitleActor,
+  getMovieDetails,
+  getMovieCast,
+  addFavFilm,
+} from '../MovieAPI/MovieAPI';
+// UI
+import { Col, Container, Row } from 'react-bootstrap';
 
-export default function Search() {
-  const [searchTerm, setSearchTerm] = useState("");
+function Search() {
+  // state for search bar
+  const [searchTerm, setSearchTerm] = useState('');
   const [searchSubmitStatus, setSearchSubmitStatus] = useState(false);
+  // stop warning error
+  console.log(searchSubmitStatus);
   // state for the movies results
   const [movieData, setMovieData] = useState([]);
-
+  const [movieCast, setMovieCast] = useState([]);
+  // for the info modal
   const handleClose = () => setShowInfoModal(false);
+
   const handleSearch = (e) => {
     e.preventDefault();
     setSearchSubmitStatus(true);
     setSearchTerm(e.target.value);
-    // actually search for movies, passing in prop here
     searchMovies(searchTerm);
-    //console.log(searchTerm);
-    setSearchTerm("");
+    setSearchTerm('');
     // once the movie state is set
     setSearchSubmitStatus(false);
   };
@@ -30,109 +39,113 @@ export default function Search() {
   const onChangeHandler = (e) => {
     e.preventDefault();
     setSearchTerm(e.target.value);
-    if (searchSubmitStatus) {
-      console.log(searchTerm);
-    }
   };
 
   // state for info modal
   const [infoModalData, setInfoModalData] = useState([]);
   const [showInfoModal, setShowInfoModal] = useState(false);
 
-  const infoHandler = async (idx) => {
-    console.log(idx);
-    const movieId = movieData[idx].id;
-    let movieInfoData;
+  const mainHandler = (iconFunction, index) => {
+    switch (iconFunction) {
+      case 'info':
+        infoHandler(index);
+        break;
+      case 'favourite':
+        favHandler(index);
+        break;
 
-    // get data from id
-
-    try {
-      console.log("calling async api");
-
-      const getUrl = `${process.env.REACT_APP_BE_LOCAL}/moviedetails?id=${movieId}`;
-      console.log(getUrl);
-      movieInfoData = await axios.get(getUrl);
-      setInfoModalData(movieInfoData.data);
-      setShowInfoModal(true);
-      console.log(movieInfoData);
-    } catch (error) {
-      setInfoModalData([]);
-      console.log(error);
-      console.log("error in acquiring movie data by id");
-      alert("Error in acquiring movie information");
+      default:
+        break;
     }
   };
 
-  // add to favourites handler
+  const infoHandler = async (i) => {
+    // console.log('Hey we are in the movie info handler');
 
-  const favHandler = async (idx) => {
-    const { id, title, poster_path, overview, release_date } = movieData[idx];
-    const favData = {
-      id: id,
-      title: title,
-      poster_path: poster_path,
-      overview: overview,
-      release_date: release_date,
-    };
+    const movieId = movieData[i].id;
 
+    // get data from id
     try {
-      console.log("calling async api");
-
-      const postUrl = `${process.env.REACT_APP_BE_LOCAL}/movies`;
-      console.log(postUrl);
-      const newFavouritesData = await axios.post(postUrl, favData);
-
-      // newFavouritesData contains new favourites list items
-      // this doesn't need to be used but can be console logged
-      // for info purposes
-      console.log(newFavouritesData);
+      const movieDetails = await getMovieDetails(movieId);
+      setInfoModalData(movieDetails);
+      const castInfo = await getMovieCast(movieId);
+      setMovieCast(castInfo);
+      setShowInfoModal(true);
     } catch (error) {
+      setInfoModalData([]);
       console.log(error);
-      console.log("error in adding to favourites list");
-      alert("Error in adding to favourites collection");
+      console.log('error in acquiring movie data by id');
+      alert('Error in acquiring movie information');
+    }
+  };
+
+  // useContext to inform users of movies added to DB
+  const { show, numberClicked, movieCheck } = useContext(FavouriteContext);
+  // handler for adding a favourite movie to the DB.
+  const favHandler = async (i) => {
+    // checking whether the user has clicked on the same film
+    // twice
+    if (!movieCheck.idArray.includes(movieData[i].id)) {
+      numberClicked.setNumFavourites(numberClicked.numFavourites + 1);
+      window.localStorage.setItem(
+        'favCounter',
+        String(numberClicked.numFavourites + 1)
+      );
+      show.setShowStar(true);
+      const tempArray = movieCheck.idArray;
+      tempArray.push(movieData[i].id);
+      // console.log(tempArray);
+      movieCheck.setIdArray(tempArray);
+    }
+
+    // add film to database
+    if (addFavFilm(movieData[i])) {
+      console.log('Film added successfully');
+    } else {
+      console.error(`Error adding ${i} film`);
     }
   };
 
   // search the API for films
   const searchMovies = async (searchTerm) => {
-    const cleanedSearchTerm = searchTerm.replace(/\s{1,}/g, "+");
+    // get rid of spaces in between words, replace with +
+    const cleanedSearchTerm = searchTerm.replace(/\s{1,}/g, '+');
     const results = await filmByTitleActor(cleanedSearchTerm.trim());
     setMovieData(results.results);
-    //console.dir(results);
-    //console.dir(movieData);
   };
 
   return (
     <>
-      <NavBar />
-
-      <Container className="mt-4" fluid>
-        <div className="wrapper mt-4">
+      <Container className='mt-4' fluid>
+        <div className='wrapper mt-4'>
           <SearchBar
             handleSearch={handleSearch}
             onChangeHandler={onChangeHandler}
             value={searchTerm}
           />
-          <Row md={2} xs={1} lg={3} xl={4} className="g-4 mt-3">
+          <Row md={2} xs={1} lg={3} xl={4} className='g-4 mt-3'>
             {movieData?.map((item, index) => (
               <Col key={item.id}>
                 <MovieCard
                   movie={item}
-                  infohandler={infoHandler}
-                  favhandler={favHandler}
+                  handler={mainHandler}
                   idx={index}
-                  buttonvariant={"1"}
+                  buttonvariant={'1'}
                 />
               </Col>
             ))}
           </Row>
         </div>
+
         <InfoModal
           data={infoModalData}
           show={showInfoModal}
           handleClose={handleClose}
+          movieCast={movieCast}
         />
       </Container>
     </>
   );
 }
+
+export default Search;
